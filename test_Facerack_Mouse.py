@@ -5,6 +5,7 @@ import numpy as np
 from collections import deque
 import pyautogui
 import math
+from keyboard import is_pressed
 
 file_model_x = "model/catboost_regressor_model_X.cbm"
 file_model_y = "model/catboost_regressor_model_Y.cbm"
@@ -17,6 +18,8 @@ model_y.load_model(file_model_y)
 model_cilck = CatBoostClassifier()
 model_cilck.load_model(filename)
 
+
+# -MASK Face-
 LANDMARKS = {
     "left": 234,
     "right": 454,   
@@ -76,6 +79,8 @@ def calc_yaw_pitch(iris_center, eye_center):
     pitch = np.degrees(np.arctan2(dy, eye_center[1])) # ขึ้น/ลง
     return yaw, pitch
 
+pyautogui.moveTo(CENTER_X,CENTER_Y)
+
 # Webcam input
 cap = cv2.VideoCapture(0)
 
@@ -87,9 +92,6 @@ def get_3d_coordinates(landmark, image_width, image_height):
 
 def move_mouse_face(array):
     pass
-
-# Initial mouse position for the data collection grid
-pyautogui.moveTo(223, 493)
 
 while cap.isOpened():
     data = []
@@ -216,29 +218,28 @@ while cap.isOpened():
 
     cv2.imshow("Face Tracker", frame)
 
-    data.append(raw_yaw_deg)
-    data.append(raw_pitch_deg)
+    if len(data) == 10:
+        data.append(raw_yaw_deg)
+        data.append(raw_pitch_deg)
 
     new_data = np.array(data)
 
-    predicted_screen_x = model_x.predict(new_data)
-    predicted_screen_y = model_y.predict(new_data)
+    if len(data) == 12:
+        predicted_screen_x = model_x.predict(new_data)
+        predicted_screen_y = model_y.predict(new_data)
 
-    pyautogui.moveTo(predicted_screen_x,predicted_screen_y)
-
-    predicted = model_cilck.predict(data_click)
-    cv2.putText(frame, f"yawn : {predicted}", (30, 50),
+        pyautogui.moveTo(predicted_screen_x,predicted_screen_y)
+    
+    if len(data_click) == 18:
+        predicted = model_cilck.predict(data_click)
+        cv2.putText(frame, f"yawn : {predicted}", (30, 50),
         cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
-    if predicted == 1:
-        pyautogui.click()
+        if predicted == 1:
+            pyautogui.click()
 
     # --- This is the crucial part that was missing/changed ---
-    key = cv2.waitKey(1) & 0xFF
-
-    if key == ord('q'):
+    if is_pressed('a') or is_pressed('A'):
         break
-    elif key == ord('e'):
-        print(data)
 
 cap.release()
 cv2.destroyAllWindows()
