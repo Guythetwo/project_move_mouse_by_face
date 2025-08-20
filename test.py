@@ -3,7 +3,7 @@ from catboost import CatBoostClassifier
 import cv2
 import pyautogui
 
-filename = "CatBoostClassifier_model.cbm"
+filename = "model/CatBoostClassifier_model.cbm"
 model = CatBoostClassifier()
 model.load_model(filename)
 important_mouth_indices = [61, 291, 13, 14, 78, 308]
@@ -32,11 +32,10 @@ while cap.isOpened():
                 if idx < len(face_landmarks.landmark):
                     landmark = face_landmarks.landmark[idx]
                     data.extend([landmark.x, landmark.y, landmark.z])
+                    
             predicted = model.predict(data)
             cv2.putText(frame, f"yawn : {predicted}", (30, 50),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
-            if predicted == 1:
-                pyautogui.click()
 
     cv2.imshow("Face Tracker", frame)
 
