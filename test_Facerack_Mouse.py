@@ -1,5 +1,5 @@
 import cv2
-from catboost import CatBoostRegressor
+from catboost import CatBoostRegressor, CatBoostClassifier
 import mediapipe as mp
 import numpy as np
 from collections import deque
@@ -9,14 +9,17 @@ from keyboard import is_pressed
 from collections import deque
 
 # --- Model Loading ---
-file_model_x = "model/catboost_regressor_model_X.cbm"
-file_model_y = "model/catboost_regressor_model_Y.cbm"
+file_model_x = "model/catboost_regressor_model_X_V1.cbm"
+file_model_y = "model/catboost_regressor_model_Y_V1.cbm"
+filename = "model/CatBoostClassifier_model.cbm"
 
 try:
     model_x = CatBoostRegressor()
     model_x.load_model(file_model_x)
     model_y = CatBoostRegressor()
     model_y.load_model(file_model_y)
+    model = CatBoostClassifier()
+    model.load_model(filename)
 except Exception as e:
     print(f"Error loading models: {e}")
     print("Please ensure the model files are in the 'model' directory.")
@@ -39,6 +42,8 @@ RIGHT_IRIS = [468] # User's left eye.
 LEFT_EYE = [362, 263]
 RIGHT_EYE = [33, 133]
 
+important_mouth_indices = [61, 291, 13, 14, 78, 308]
+
 # Screen resolution
 MONITOR_WIDTH, MONITOR_HEIGHT = pyautogui.size()
 CENTER_X = MONITOR_WIDTH // 2
@@ -51,7 +56,7 @@ ray_directions = deque(maxlen=filter_length)
 
 smoothed_x = 1
 smoothed_y = -1
-alpha = 0.4 # ปรับค่านี้เพื่อเปลี่ยนความสมูท
+alpha = 0.55 # ปรับค่านี้เพื่อเปลี่ยนความสมูท
 
 # MediaPipe Face Mesh setup
 mp_face_mesh = mp.solutions.face_mesh
@@ -98,6 +103,7 @@ if not cap.isOpened():
 while cap.isOpened():
     # Initialize data list for each frame
     data = []
+    data_click = []
     
     ret, frame = cap.read()
     if not ret:
@@ -109,6 +115,8 @@ while cap.isOpened():
     h, w, _ = frame.shape
     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     results = face_mesh.process(rgb_frame)
+
+    cv2.circle(frame, (w // 2, h // 2), radius=10, color=(0, 0, 255), thickness=-1)
 
     if results.multi_face_landmarks:
         face_landmarks = results.multi_face_landmarks[0].landmark
@@ -134,13 +142,19 @@ while cap.isOpened():
         cv2.putText(frame, f"R yaw: {right_yaw:.2f} pitch: {right_pitch:.2f}", (30, 80),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
         
-        # --- Head Pose Calculation ---
+                # --- Head Pose Calculation ---
         key_points = {}
         for name, idx in LANDMARKS.items():
             pt = landmark_to_np(face_landmarks[idx], w, h)
             key_points[name] = pt
             x, y = int(pt[0]), int(pt[1])
             data.extend([x, y]) # Add landmark x,y to our feature list
+        
+        for face_landmarks in results.multi_face_landmarks:
+            for idx in important_mouth_indices:
+                if idx < len(face_landmarks.landmark):
+                    landmark = face_landmarks.landmark[idx]
+                    data_click.extend([landmark.x, landmark.y, landmark.z])
 
         # Calculate orientation vectors
         right_axis = (key_points["right"] - key_points["left"])
@@ -180,8 +194,7 @@ while cap.isOpened():
         # --- Prediction and Mouse Control ---
         if len(data) == 12:
             input_data = np.array(data).reshape(1, -1) # Reshape for single prediction
-            
-            # Predict screen coordinates
+
             predicted_screen_x = model_x.predict(input_data)
             predicted_screen_y = model_y.predict(input_data)
 
@@ -194,6 +207,9 @@ while cap.isOpened():
                 smoothed_y = alpha * predicted_screen_y + (1 - alpha) * smoothed_y
 
             pyautogui.moveTo(smoothed_x, smoothed_y)
+
+        predicted = model.predict(data_click)
+        print(predicted)
 
         # --- Visualization of head pose vector ---
         ray_length = 150
